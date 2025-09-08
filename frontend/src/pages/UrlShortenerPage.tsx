@@ -11,7 +11,7 @@ import {
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import axios from "axios";
-import { Log } from "../../../middleware-logger/src/index";
+import { Log } from "../utils/logger";
 
 const API_BASE_URL = "http://localhost:8000/api";
 

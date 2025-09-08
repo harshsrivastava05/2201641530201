@@ -3,14 +3,28 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createShortUrl, redirectToLongUrl, getUrlStats } from './controllers/url.controller';
-import { Log } from 'middleware-logger';
+import { Log } from './utils/logger';
 
 dotenv.config();
+
+// Validate required environment variables
+const requiredEnvVars = ['DATABASE_URL'];
+for (const envVar of requiredEnvVars) {
+    if (!process.env[envVar]) {
+        console.error(`Missing required environment variable: ${envVar}`);
+        process.exit(1);
+    }
+}
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-app.use(cors());
+// CORS configuration
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true
+}));
+
 app.use(express.json());
 
 // API Routes
@@ -22,16 +36,13 @@ app.get('/:shortcode', redirectToLongUrl);
 
 const startServer = async () => {
     try {
-        if (!process.env.DATABASE_URL) {
-            throw new Error("DATABASE_URL not defined in .env file");
-        }
-        await mongoose.connect(process.env.DATABASE_URL);
+        await mongoose.connect(process.env.DATABASE_URL!);
         await Log('backend', 'info', 'db', 'Successfully connected to MongoDB.');
         
         app.listen(PORT, () => {
             Log('backend', 'info', 'service', `Server is running on port ${PORT}`);
         });
-    } catch (error) {
+    } catch (error: any) {
         await Log('backend', 'fatal', 'service', `Failed to start server: ${error.message}`);
         process.exit(1);
     }

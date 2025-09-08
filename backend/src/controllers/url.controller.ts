@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import UrlModel, { IUrl } from '../models/url.model';
 import { nanoid } from 'nanoid';
-import { Log } from "../../../middleware-logger/src/index"
+import { Log } from '../utils/logger';
 
 const APP_URL = process.env.APP_URL || 'http://localhost:8000';
 
@@ -43,7 +43,7 @@ export const createShortUrl = async (req: Request, res: Response) => {
             expiry: expiresAt.toISOString(),
         });
 
-    } catch (error) {
+    } catch (error: any) {
         await Log('backend', 'fatal', 'handler', `An unexpected error occurred: ${error.message}`);
         res.status(500).json({ error: 'Internal Server Error' });
     }
@@ -69,7 +69,7 @@ export const redirectToLongUrl = async (req: Request, res: Response) => {
         await Log('backend', 'info', 'db', `Logged click for shortcode: ${shortcode}`);
 
         return res.redirect(urlDoc.longUrl);
-    } catch (error) {
+    } catch (error: any) {
         await Log('backend', 'error', 'handler', `Redirect failed for ${shortcode}: ${error.message}`);
         return res.status(500).send('Internal Server Error');
     }
@@ -81,7 +81,7 @@ export const getUrlStats = async (req: Request, res: Response) => {
         const stats = await UrlModel.find({}).sort({ createdAt: -1 });
         await Log('backend', 'info', 'db', `Fetched ${stats.length} records for stats.`);
         res.status(200).json(stats);
-    } catch (error) {
+    } catch (error: any) {
         await Log('backend', 'error', 'db', `Failed to fetch URL stats: ${error.message}`);
         res.status(500).json({ error: 'Internal Server Error' });
     }
