@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, Container, Box, Typography, AppBar, Toolbar, Tabs, Tab } from '@mui/material';
 import { theme } from './theme';
 import UrlShortenerPage from './pages/UrlShortenerPage';
 import UrlStatsPage from './pages/UrlStatsPage';
+import { Log } from './utils/logger';
 
 function App() {
   const [tabIndex, setTabIndex] = useState(0);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  useEffect(() => {
+    Log('frontend', 'info', 'component', 'App component initialized');
+  }, []);
+
+  const handleTabChange = async (event: React.SyntheticEvent, newValue: number) => {
+    const previousTab = tabIndex === 0 ? 'Shorten URL' : 'Statistics';
+    const newTab = newValue === 0 ? 'Shorten URL' : 'Statistics';
+    
+    await Log('frontend', 'info', 'component', `Tab changed from "${previousTab}" to "${newTab}"`);
     setTabIndex(newValue);
   };
 

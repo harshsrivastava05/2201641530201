@@ -37,29 +37,29 @@ const UrlShortenerPage = () => {
 
   useEffect(() => {
     Log("frontend", "info", "page", "UrlShortenerPage loaded");
+    Log("frontend", "debug", "config", `API Base URL: ${API_BASE_URL}`);
   }, []);
 
-  const handleAddInput = () => {
+  const handleAddInput = async () => {
     if (inputs.length < 5) {
-      setInputs([
-        ...inputs,
-        { id: Date.now(), longUrl: "", shortcode: "", validity: "" },
-      ]);
-      Log("frontend", "info", "component", "Added new URL input field");
+      const newInput = { id: Date.now(), longUrl: "", shortcode: "", validity: "" };
+      setInputs([...inputs, newInput]);
+      await Log("frontend", "info", "component", `Added new URL input field. Total fields: ${inputs.length + 1}`);
+    } else {
+      await Log("frontend", "warn", "component", "Maximum number of URL input fields (5) reached");
     }
   };
 
-  const handleRemoveInput = (id: number) => {
-    setInputs(inputs.filter((input) => input.id !== id));
-    Log(
-      "frontend",
-      "info",
-      "component",
-      `Removed URL input field with id ${id}`
-    );
+  const handleRemoveInput = async (id: number) => {
+    if (inputs.length > 1) {
+      setInputs(inputs.filter((input) => input.id !== id));
+      await Log("frontend", "info", "component", `Removed URL input field with id ${id}. Remaining fields: ${inputs.length - 1}`);
+    } else {
+      await Log("frontend", "warn", "component", "Cannot remove the last remaining input field");
+    }
   };
 
-  const handleInputChange = (
+  const handleInputChange = async (
     id: number,
     field: keyof Omit<UrlInput, "id">,
     value: string
@@ -69,68 +69,117 @@ const UrlShortenerPage = () => {
         input.id === id ? { ...input, [field]: value } : input
       )
     );
+    
+    // Log input changes for debugging (be careful not to log sensitive data)
+    if (field === 'longUrl' && value) {
+      await Log("frontend", "debug", "component", `URL input updated for field ${id}`);
+    } else if (field === 'shortcode' && value) {
+      await Log("frontend", "debug", "component", `Custom shortcode "${value}" entered for field ${id}`);
+    } else if (field === 'validity' && value) {
+      await Log("frontend", "debug", "component", `Validity "${value}" minutes set for field ${id}`);
+    }
+  };
+
+  const validateInputs = async (inputs: UrlInput[]) => {
+    const validInputs = inputs.filter((input) => input.longUrl.trim() !== "");
+    await Log("frontend", "info", "component", `Validating ${validInputs.length} URLs out of ${inputs.length} input fields`);
+
+    for (const input of validInputs) {
+      try {
+        new URL(input.longUrl); // Basic URL validation
+        await Log("frontend", "debug", "component", `URL validation passed for input ${input.id}`);
+      } catch (_) {
+        const error = `Invalid URL format: ${input.longUrl}`;
+        await Log("frontend", "error", "component", error);
+        throw new Error(error);
+      }
+
+      if (input.validity && !/^\d+$/.test(input.validity)) {
+        const error = `Validity must be an integer for URL: ${input.longUrl}`;
+        await Log("frontend", "error", "component", error);
+        throw new Error(error);
+      }
+
+      if (input.validity) {
+        await Log("frontend", "debug", "component", `Custom validity ${input.validity} minutes set for input ${input.id}`);
+      }
+    }
+
+    return validInputs;
   };
 
   const handleSubmit = async () => {
     setError("");
     setResults([]);
-    await Log(
-      "frontend",
-      "info",
-      "component",
-      `Form submitted with ${inputs.length} URLs.`
-    );
-
-    const promises = inputs
-      .filter((input) => input.longUrl.trim() !== "")
-      .map((input) => {
-        // Client-side validation
-        try {
-          new URL(input.longUrl); // Basic URL validation
-        } catch (_) {
-          throw new Error(`Invalid URL format: ${input.longUrl}`);
-        }
-        if (input.validity && !/^\d+$/.test(input.validity)) {
-          throw new Error(
-            `Validity must be an integer for URL: ${input.longUrl}`
-          );
-        }
-
-        return axios
-          .post(`${API_BASE_URL}/shorturls`, {
-            url: input.longUrl,
-            shortcode: input.shortcode || undefined,
-            validity: input.validity || undefined,
-          })
-          .then((response) => ({
-            originalUrl: input.longUrl,
-            ...response.data,
-          }));
-      });
+    
+    await Log("frontend", "info", "component", `Form submission started with ${inputs.length} input fields`);
 
     try {
+      const validInputs = await validateInputs(inputs);
+      
+      if (validInputs.length === 0) {
+        const errorMsg = "No valid URLs to process";
+        setError(errorMsg);
+        await Log("frontend", "warn", "component", errorMsg);
+        return;
+      }
+
+      await Log("frontend", "info", "api", `Sending ${validInputs.length} URLs to API for shortening`);
+      
+      const promises = validInputs.map(async (input) => {
+        const payload = {
+          url: input.longUrl,
+          shortcode: input.shortcode || undefined,
+          validity: input.validity || undefined,
+        };
+
+        await Log("frontend", "debug", "api", `Making API request for URL: ${input.longUrl.substring(0, 50)}${input.longUrl.length > 50 ? '...' : ''}`);
+        
+        return axios
+          .post(`${API_BASE_URL}/shorturls`, payload)
+          .then(async (response) => {
+            await Log("frontend", "info", "api", `Successfully shortened URL with shortcode: ${response.data.shortcode || 'auto-generated'}`);
+            return {
+              originalUrl: input.longUrl,
+              ...response.data,
+            };
+          })
+          .catch(async (error) => {
+            const errorMsg = error.response?.data?.error || error.message;
+            await Log("frontend", "error", "api", `Failed to shorten URL ${input.longUrl}: ${errorMsg}`);
+            throw error;
+          });
+      });
+
       const settledResults = await Promise.all(promises);
       setResults(settledResults);
-      await Log(
-        "frontend",
-        "info",
-        "api",
-        "Successfully shortened all valid URLs."
-      );
+      
+      await Log("frontend", "info", "component", `Successfully processed ${settledResults.length} URLs. Form submission completed.`);
+      
     } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.error ||
-        err.message ||
-        "An unknown error occurred.";
+      const errorMessage = err.response?.data?.error || err.message || "An unknown error occurred.";
       setError(errorMessage);
-      await Log(
-        "frontend",
-        "error",
-        "api",
-        `Failed to shorten URLs: ${errorMessage}`
-      );
+      await Log("frontend", "error", "component", `Form submission failed: ${errorMessage}`);
     }
   };
+
+  const handleLinkClick = async (shortlink: string) => {
+    await Log("frontend", "info", "component", `User clicked on generated short link: ${shortlink}`);
+  };
+
+  // Log when results are displayed
+  useEffect(() => {
+    if (results.length > 0) {
+      Log("frontend", "info", "component", `Displaying ${results.length} shortened URL results to user`);
+    }
+  }, [results]);
+
+  // Log when errors occur
+  useEffect(() => {
+    if (error) {
+      Log("frontend", "error", "component", `Error state updated: ${error}`);
+    }
+  }, [error]);
 
   return (
     <Paper elevation={3} sx={{ p: 4, mt: 2 }}>
@@ -183,7 +232,7 @@ const UrlShortenerPage = () => {
           onClick={handleAddInput}
           disabled={inputs.length >= 5}
         >
-          Add URL
+          Add URL ({inputs.length}/5)
         </Button>
         <Button
           variant="contained"
@@ -191,7 +240,7 @@ const UrlShortenerPage = () => {
           onClick={handleSubmit}
           size="large"
         >
-          Shorten
+          Shorten URLs
         </Button>
       </Box>
 
@@ -215,6 +264,7 @@ const UrlShortenerPage = () => {
                   href={result.shortlink}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => handleLinkClick(result.shortlink)}
                 >
                   {result.shortlink}
                 </a>
