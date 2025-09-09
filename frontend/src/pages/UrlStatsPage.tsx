@@ -54,7 +54,9 @@ const UrlStatsPage = () => {
       await Log("frontend", "debug", "config", `API endpoint: ${API_BASE_URL}/stats`);
       
       const startTime = Date.now();
-      const response = await axios.get(`${API_BASE_URL}/stats`);
+      const response1 = await axios.get(`${API_BASE_URL}/stats`);
+      const data = response1.data.data;
+      const response = { data }; 
       const endTime = Date.now();
       
       await Log("frontend", "info", "api", `Successfully fetched ${response.data.length} statistics records in ${endTime - startTime}ms`);
